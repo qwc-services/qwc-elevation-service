@@ -74,15 +74,31 @@ def load_datasets(tenant):
     config_handler = RuntimeConfig("elevation", app.logger)
     config = config_handler.tenant_config(tenant)
 
+    single_dataset = config.get('elevation_dataset')
     datasets_config = config.get('elevation_datasets')
 
-    if not datasets_config or not isinstance(datasets_config, list) or len(datasets_config) == 0:
-        abort(Response('elevation_datasets undefined', 500))
+    if (
+        (not datasets_config or not isinstance(datasets_config, list) or len(datasets_config) == 0)
+        and not single_dataset
+    ):
+        abort(Response('elevation_datasets and elevation_dataset are undefined', 500))
 
-    datasets = {
-        cfg["name"]: load_single_dataset(cfg["dataset_path"])
+    if not datasets_config:
+        datasets_config = []
+
+    if single_dataset:
+        datasets_config.insert(0, {
+            "name": None,
+            "dataset_path": single_dataset
+        })
+
+    datasets = [
+        {
+            "name": cfg.get("name", None),
+            "dataset": load_single_dataset(cfg["dataset_path"])
+        }
         for cfg in datasets_config
-    }
+    ]
     return datasets
 
 
@@ -137,11 +153,17 @@ def getelevation():
         return jsonify({"error": "Failed to parse projection"})
 
 
-    elevations = {}
-    for name, dataset in datasets.items():
+    elevations = []
+    for dataset_data in datasets:
+        dataset = dataset_data["dataset"]
+
         crsTransform = osr.CoordinateTransformation(inputSpatialRef, dataset["spatialRef"])
         elevation = sample_elevation(dataset, pos, crsTransform)
-        elevations[name] = elevation
+
+        elevations.append({
+            "dataset": dataset_data["name"],
+            "elevation": elevation
+        })
 
     return jsonify({"elevation": elevations})
 
