@@ -93,10 +93,10 @@ def load_datasets(tenant):
         })
 
     datasets = [
-        {
-            "name": cfg.get("name", None),
-            "dataset": load_single_dataset(cfg["dataset_path"])
-        }
+        (
+            cfg.get("name", None),
+            load_single_dataset(cfg["dataset_path"])
+        )
         for cfg in datasets_config
     ]
     return datasets
@@ -154,14 +154,12 @@ def getelevation():
 
 
     elevations = []
-    for dataset_data in datasets:
-        dataset = dataset_data["dataset"]
-
+    for (name, dataset) in datasets:
         crsTransform = osr.CoordinateTransformation(inputSpatialRef, dataset["spatialRef"])
         elevation = sample_elevation(dataset, pos, crsTransform)
 
         elevations.append({
-            "dataset": dataset_data["name"],
+            "dataset": name,
             "elevation": elevation
         })
 
@@ -206,41 +204,46 @@ def getheightprofile():
     if inputSpatialRef.ImportFromEPSG(epsg) != 0:
         return jsonify({"error": "Failed to parse projection"})
 
-    crsTransforms = [
-        osr.CoordinateTransformation(inputSpatialRef, dataset["spatialRef"])
-        for dataset in datasets.values()
-    ]
+    datasets_elevations = []
 
-    elevations = { name: [] for name in datasets }
+    for (name, dataset) in datasets:
+        crsTransform = osr.CoordinateTransformation(inputSpatialRef, dataset["spatialRef"])
 
-    x = 0
-    i = 0
-    p1 = query["coordinates"][i]
-    p2 = query["coordinates"][i + 1]
-    dr = (p2[0] - p1[0], p2[1] - p1[1])
-    cumDistances = list(accumulate(query["distances"]))
-    cumDistances.insert(0, 0)
-    totDistance = sum(query["distances"])
-    for s in range(0, numSamples):
-        while i + 2 < len(cumDistances) and x > cumDistances[i + 1]:
-            i += 1
-            p1 = query["coordinates"][i]
-            p2 = query["coordinates"][i + 1]
-            dr = (p2[0] - p1[0], p2[1] - p1[1])
+        elevations = []
 
-        try:
-            mu = (x - cumDistances[i]) / (cumDistances[i+1] - cumDistances[i])
-        except ZeroDivisionError:
-            mu = 0
+        x = 0
+        i = 0
+        p1 = query["coordinates"][i]
+        p2 = query["coordinates"][i + 1]
+        dr = (p2[0] - p1[0], p2[1] - p1[1])
+        cumDistances = list(accumulate(query["distances"]))
+        cumDistances.insert(0, 0)
+        totDistance = sum(query["distances"])
+        for s in range(0, numSamples):
+            while i + 2 < len(cumDistances) and x > cumDistances[i + 1]:
+                i += 1
+                p1 = query["coordinates"][i]
+                p2 = query["coordinates"][i + 1]
+                dr = (p2[0] - p1[0], p2[1] - p1[1])
 
-        pos = (p1[0] + mu * dr[0], p1[1] + mu * dr[1])
-        for (name, dataset), crsTrans in zip(datasets.items(), crsTransforms):
-            elevation = sample_elevation(dataset, pos, crsTrans)
-            elevations[name].append(elevation)
+            try:
+                mu = (x - cumDistances[i]) / (cumDistances[i+1] - cumDistances[i])
+            except ZeroDivisionError:
+                mu = 0
 
-        x += totDistance / (numSamples - 1)
+            pos = (p1[0] + mu * dr[0], p1[1] + mu * dr[1])
 
-    return jsonify({"elevations": elevations})
+            elevation = sample_elevation(dataset, pos, crsTransform)
+            elevations.append(elevation)
+
+            x += totDistance / (numSamples - 1)
+
+        datasets_elevations.append({
+            "dataset": name,
+            "elevations": elevations
+        })
+
+    return jsonify({"elevations": datasets_elevations})
 
 
 """ readyness probe endpoint """
