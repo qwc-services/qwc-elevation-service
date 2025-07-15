@@ -75,7 +75,7 @@ def load_datasets(tenant):
     config = config_handler.tenant_config(tenant)
 
     single_dataset = config.get('elevation_dataset')
-    datasets_config = config.get('extra_datasets', [])
+    datasets_config = config.get('elevation_datasets', [])
 
     if (
         (not datasets_config or not isinstance(datasets_config, list) or len(datasets_config) == 0)
