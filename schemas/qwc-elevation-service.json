@@ -21,12 +21,10 @@
       "type": "object",
       "properties": {
         "elevation_dataset": {
-          "title": "Elevation dataset",
-          "description": "Path to the elevation dataset (file or URL). Example: https://data.sourcepole.com/srtm_1km_3857.tif",
+          "description": "Elevation dataset (file or URL). Example: https://data.sourcepole.com/srtm_1km_3857.tif",
           "type": "string"
-        }
+        },
         "elevation_datasets": {
-          "title": "Elevation datasets",
           "description": "List of elevation datasets to use for elevation queries.",
           "type": "array",
           "items": {
@@ -38,7 +36,6 @@
                 "type": "string"
               },
               "dataset_path": {
-                "title": "Dataset path",
                 "description": "Elevation dataset (file or URL). Example: https://data.sourcepole.com/srtm_1km_3857.tif",
                 "type": "string"
               }

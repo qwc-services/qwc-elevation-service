@@ -75,16 +75,13 @@ def load_datasets(tenant):
     config = config_handler.tenant_config(tenant)
 
     single_dataset = config.get('elevation_dataset')
-    datasets_config = config.get('elevation_datasets')
+    datasets_config = config.get('extra_datasets', [])
 
     if (
         (not datasets_config or not isinstance(datasets_config, list) or len(datasets_config) == 0)
         and not single_dataset
     ):
         abort(Response('elevation_datasets and elevation_dataset are undefined', 500))
-
-    if not datasets_config:
-        datasets_config = []
 
     if single_dataset:
         datasets_config.insert(0, {
@@ -163,7 +160,10 @@ def getelevation():
             "elevation": elevation
         })
 
-    return jsonify({"elevation": elevations})
+    # Backwards compatibility for single dataset
+    if len(elevations) == 1 and elevations[0]["dataset"] is None:
+        return jsonify({"elevation": elevations[0]["elevation"]})
+    return jsonify({"elevation_list": elevations})
 
 
 @app.route("/getheightprofile", methods=['POST'])
@@ -243,7 +243,11 @@ def getheightprofile():
             "elevations": elevations
         })
 
-    return jsonify({"elevations": datasets_elevations})
+    # Backwards compatibility for single dataset
+    if len(datasets_elevations) == 1 and datasets_elevations[0]["dataset"] is None:
+        return jsonify({"elevations": datasets_elevations[0]["elevations"]})
+
+    return jsonify({"elevations_list": datasets_elevations})
 
 
 """ readyness probe endpoint """
