@@ -5,15 +5,13 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from flask import Flask, g, abort, request, Response, jsonify, make_response
+from flask import Flask, g, abort, request, make_response
 from itertools import accumulate
 from osgeo import gdal
-from osgeo import ogr
 from osgeo import osr
 import math
 import re
 import struct
-import sys
 from qwc_services_core.tenant_handler import (
     TenantHandler, TenantPrefixMiddleware, TenantSessionInterface)
 from qwc_services_core.runtime_config import RuntimeConfig
@@ -37,19 +35,19 @@ def get_datasets(tenant):
 def load_single_dataset(dataset_filename):
     raster = gdal.Open(dataset_filename)
     if not raster:
-        abort(Response('Failed to open dataset', 500))
+        abort(make_response('Failed to open dataset', 500))
 
     gtrans = raster.GetGeoTransform()
     if not gtrans:
-        abort(Response('Failed to read dataset geotransform', 500))
+        abort(make_response('Failed to read dataset geotransform', 500))
 
     rasterSpatialRef = osr.SpatialReference()
     if rasterSpatialRef.ImportFromWkt(raster.GetProjectionRef()) != 0:
-        abort(Response('Failed to parse dataset projection', 500))
+        abort(make_response('Failed to parse dataset projection', 500))
 
     band = raster.GetRasterBand(1)
     if not band:
-        abort(Response('Failed to open dataset raster band', 500))
+        abort(make_response('Failed to open dataset raster band', 500))
 
     rasterUnitsToMeters = 1
     if band.GetUnitType() == "ft":
@@ -81,7 +79,7 @@ def load_datasets(tenant):
         (not datasets_config or not isinstance(datasets_config, list) or len(datasets_config) == 0)
         and not single_dataset
     ):
-        abort(Response('elevation_datasets and elevation_dataset are undefined', 500))
+        abort(make_response('elevation_datasets and elevation_dataset config parameters are undefined', 500))
 
     if single_dataset:
         datasets_config.insert(0, {
@@ -131,23 +129,24 @@ def sample_elevation(dataset, pos, crsTransform):
 # `/getelevation?pos=<pos>&crs=<crs>`
 # pos: the query position, as `x,y`
 # crs: the crs of the query position
-# output: a json document with the elevation in meters for each dataset:
-#   `{elevation: { dataset1: h, dataset2: h, ... } }`
+# output: a json document with the elevation in meters: `{elevation: h}`
+#   or a list of elevations for each dataset:
+#   `{elevation_list: { dataset1: h, dataset2: h, ... } }`
 def getelevation():
     datasets = get_datasets(tenant_handler.tenant())
     try:
         pos = request.args['pos'].split(',')
         pos = [float(pos[0]), float(pos[1])]
     except:
-        return jsonify({"error": "Invalid position specified"})
+        return {"error": "Invalid position specified"}, 400
     try:
         epsg = int(re.match(r'epsg:(\d+)', request.args['crs'], re.IGNORECASE).group(1))
     except:
-        return jsonify({"error": "Invalid projection specified"})
+        return {"error": "Invalid projection specified"}, 400
 
     inputSpatialRef = osr.SpatialReference()
     if inputSpatialRef.ImportFromEPSG(epsg) != 0:
-        return jsonify({"error": "Failed to parse projection"})
+        return {"error": "Failed to parse projection"}, 400
 
 
     elevations = []
@@ -162,8 +161,8 @@ def getelevation():
 
     # Backwards compatibility for single dataset
     if len(elevations) == 1 and elevations[0]["dataset"] is None:
-        return jsonify({"elevation": elevations[0]["elevation"]})
-    return jsonify({"elevation_list": elevations})
+        return {"elevation": elevations[0]["elevation"]}
+    return {"elevation_list": elevations}
 
 
 @app.route("/getheightprofile", methods=['POST'])
@@ -175,34 +174,35 @@ def getelevation():
 #            projection: <EPSG:XXXX, projection of coordinates>,
 #            samples: <number of height samples to return>
 #        }
-# output: a json document with heights in meters for each dataset:
-#   `{elevations: { dataset1: [h1, h2, ...], dataset2: [h1, h2, ...], ... } }`
+# output: a json document with either heights in meters: `{elevations: [h1, h2, ...]}`
+#   or a list of elevations for each dataset:
+#  `{elevations_list: [{dataset: dataset1, elevations: [h1, h2, ...]}, {dataset: dataset2, elevations: [h1, h2, ...]}, ...]}`
 def getheightprofile():
     datasets = get_datasets(tenant_handler.tenant())
     query = request.json
 
     if not isinstance(query, dict) or not "projection" in query or not "coordinates" in query or not "distances" in query or not "samples" in query:
-        return jsonify({"error": "Bad query"})
+        return {"error": "Bad query"}, 400
 
     if not isinstance(query["coordinates"], list) or len(query["coordinates"]) < 2:
-        return jsonify({"error": "Insufficient number of coordinates specified"})
+        return {"error": "Insufficient number of coordinates specified"}, 400
 
     if not isinstance(query["distances"], list) or len(query["distances"]) != len(query["coordinates"]) - 1:
-        return jsonify({"error": "Invalid distances specified"})
+        return {"error": "Invalid distances specified"}, 400
 
     try:
         epsg = int(re.match(r'epsg:(\d+)', query["projection"], re.IGNORECASE).group(1))
     except:
-        return jsonify({"error": "Invalid projection specified"})
+        return {"error": "Invalid projection specified"}, 400
 
     try:
         numSamples = int(query["samples"])
     except:
-        return jsonify({"error": "Invalid sample count specified"})
+        return {"error": "Invalid sample count specified"}, 400
 
     inputSpatialRef = osr.SpatialReference()
     if inputSpatialRef.ImportFromEPSG(epsg) != 0:
-        return jsonify({"error": "Failed to parse projection"})
+        return {"error": "Failed to parse projection"}, 400
 
     datasets_elevations = []
 
@@ -245,15 +245,15 @@ def getheightprofile():
 
     # Backwards compatibility for single dataset
     if len(datasets_elevations) == 1 and datasets_elevations[0]["dataset"] is None:
-        return jsonify({"elevations": datasets_elevations[0]["elevations"]})
+        return {"elevations": datasets_elevations[0]["elevations"]}
 
-    return jsonify({"elevations_list": datasets_elevations})
+    return {"elevations_list": datasets_elevations}
 
 
 """ readyness probe endpoint """
 @app.route("/ready", methods=['GET'])
 def ready():
-    return jsonify({"status": "OK"})
+    return {"status": "OK"}
 
 
 """ liveness probe endpoint """
@@ -261,10 +261,9 @@ def ready():
 def healthz():
     dataset = get_datasets(tenant_handler.tenant())
     if dataset is None:
-        return make_response(jsonify({
-            "status": "FAIL", "cause": "Failed to open elevation_dataset"}), 500)
+        return {"status": "FAIL", "cause": "Failed to open elevation_dataset"}, 500
 
-    return jsonify({"status": "OK"})
+    return {"status": "OK"}
 
 
 if __name__ == "__main__":
