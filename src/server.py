@@ -131,7 +131,7 @@ def sample_elevation(dataset, pos, crsTransform):
 # crs: the crs of the query position
 # output: a json document with the elevation in meters: `{elevation: h}`
 #   or a list of elevations for each dataset:
-#   `{elevation_list: { dataset1: h, dataset2: h, ... } }`
+#   `{elevation_list: [{dataset: dataset1, elevation: h}, {dataset: dataset2, elevation: h}, ...]}`
 def getelevation():
     datasets = get_datasets(tenant_handler.tenant())
     try:
