@@ -31,7 +31,6 @@
             "type": "object",
             "properties": {
               "name": {
-                "title": "Dataset name",
                 "description": "Name of the elevation dataset.",
                 "type": "string"
               },

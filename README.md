@@ -29,6 +29,26 @@ Example:
 }
 ```
 
+Example with multiple datasets:
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/qwc-services/qwc-elevation-service/master/schemas/qwc-elevation-service.json",
+  "service": "elevation",
+  "config": {
+    "elevation_datasets": [
+      {
+        "name": "SRTM",
+        "dataset_path": "/vsicurl/https://data.sourcepole.com/srtm_1km_3857.tif"
+      },
+      {
+        "name": "Local",
+        "dataset_path": "/dtm_local.tif"
+      }
+    ]
+  }
+}
+```
+
 ### Environment variables
 
 Config options in the config file can be overridden by equivalent uppercase environment variables.
