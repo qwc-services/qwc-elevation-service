@@ -11,6 +11,7 @@ from itertools import accumulate
 from osgeo import gdal
 from osgeo import osr
 import math
+import os
 import re
 import struct
 from qwc_services_core.api import CaseInsensitiveArgument
@@ -292,4 +293,4 @@ def healthz():
 if __name__ == "__main__":
     from flask_cors import CORS
     CORS(app)
-    app.run(host='localhost', port=5002, debug=True)
+    app.run(host='localhost', port=os.environ.get("FLASK_RUN_PORT", 5000), debug=True)
