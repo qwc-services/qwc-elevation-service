@@ -53,43 +53,34 @@ Example with multiple datasets:
 
 Config options in the config file can be overridden by equivalent uppercase environment variables.
 
-| Variable                | Description            |
-|-------------------------|------------------------|
-| ELEVATION_DATASET       | path/to/dtm.tif        |
+Run locally
+-----------
 
+Install dependencies and run:
 
-Usage
------
+    # Install python3-gdal in system package
+    apt/dnf install python3-gdal
 
-Install GDAL Python bindings. `python-gdal` or `python3-gdal` packages on Debian/Ubuntu.
+    # Setup venv with --system-site-packages for python3-gdal
+    uv venv --system-site-packages .venv
 
-Run with uv:
+    export CONFIG_PATH=<CONFIG_PATH>
+    uv run src/server.py
 
-    uv venv --system-site-packages
-    ELEVATION_DATASET=/vsicurl/https://data.sourcepole.com/srtm_1km_3857.tif uv run src/server.py
+To use configs from a `qwc-docker` setup, set `CONFIG_PATH=<...>/qwc-docker/volumes/config`.
 
-API:
-* Runs by default on `http://localhost:5002`
-* `GET: /getelevation?pos=<pos>&crs=<crs>`
-  - *pos*: the query position, as `x,y`
-  - *crs*: the crs of the query position
-  - *output*: a json document with the elevation in meters: `{elevation: h}`
-  - Example: http://localhost:5002/getelevation?pos=45.976,7.658&crs=EPSG:4326
-* `POST: /getheightprofile`
-  - *payload*: a json document as follows:
+Set `FLASK_DEBUG=1` for additional debug output.
 
-        {
-            coordinates: [[x1,y1],[x2,y2],...],
-            distances: [<dist_p1_p2>, <dist_p2_p3>, ...],
-            projection: <EPSG:XXXX, projection of coordinates>,
-            samples: <number of height samples to return>
-        }
+Set `FLASK_RUN_PORT=<port>` to change the default port (default: `5000`).
 
-  - *output*: a json document with heights in meters: `{elevations: [h1, h2, ...]}`
+API documentation:
 
+    http://localhost:$FLASK_RUN_PORT/api/
 
 Docker usage
 ------------
+
+The Docker image is published on [Dockerhub](https://hub.docker.com/r/sourcepole/qwc-elevation-service).
 
 See sample [docker-compose.yml](https://github.com/qwc-services/qwc-docker/blob/master/docker-compose-example.yml) of [qwc-docker](https://github.com/qwc-services/qwc-docker).
 
