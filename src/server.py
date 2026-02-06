@@ -6,17 +6,22 @@
 # LICENSE file in the root directory of this source tree.
 
 from flask import Flask, g, abort, request, make_response
+from flask_restx import Api, Resource, reqparse, fields
 from itertools import accumulate
 from osgeo import gdal
 from osgeo import osr
 import math
 import re
 import struct
+from qwc_services_core.api import CaseInsensitiveArgument
 from qwc_services_core.tenant_handler import (
     TenantHandler, TenantPrefixMiddleware, TenantSessionInterface)
 from qwc_services_core.runtime_config import RuntimeConfig
 
 app = Flask(__name__)
+api = Api(app, version='1.0', title='Elevation API',
+          description="""API for Elevation service.""",
+          default_label='Elevation operations', doc='/api/')
 
 tenant_handler = TenantHandler(app.logger)
 app.wsgi_app = TenantPrefixMiddleware(app.wsgi_app)
@@ -125,129 +130,147 @@ def sample_elevation(dataset, pos, crsTransform):
             return 0
 
 
-@app.route("/getelevation", methods=['GET'])
-# `/getelevation?pos=<pos>&crs=<crs>`
-# pos: the query position, as `x,y`
-# crs: the crs of the query position
-# output: a json document with the elevation in meters: `{elevation: h}`
-#   or a list of elevations for each dataset:
-#   `{elevation_list: [{dataset: dataset1, elevation: h}, {dataset: dataset2, elevation: h}, ...]}`
-def getelevation():
-    datasets = get_datasets(tenant_handler.tenant())
-    try:
-        pos = request.args['pos'].split(',')
-        pos = [float(pos[0]), float(pos[1])]
-    except:
-        return {"error": "Invalid position specified"}, 400
-    try:
-        epsg = int(re.match(r'epsg:(\d+)', request.args['crs'], re.IGNORECASE).group(1))
-    except:
-        return {"error": "Invalid projection specified"}, 400
+getelevation_parser = reqparse.RequestParser(argument_class=CaseInsensitiveArgument)
+getelevation_parser.add_argument(
+    'pos', required=True, type=str,
+    help="The position, as a  `x,y` string"
+)
+getelevation_parser.add_argument(
+    'crs', required=True,
+    help="The CRS of the position, as `EPSG:<srid>`"
+)
 
-    inputSpatialRef = osr.SpatialReference()
-    if inputSpatialRef.ImportFromEPSG(epsg) != 0:
-        return {"error": "Failed to parse projection"}, 400
+@api.route('/getelevation')
+class ObjInfo(Resource):
+    @api.doc('getelevation')
+    @api.expect(getelevation_parser)
+    @api.response(200, """Returns the elevation, in meters, as follows:
+- `{ "elevation": <float> }` when a single dataset is configured
+- `{ "elevation_list": [ { "dataset": <string>, "elevation": <float> }, ... ] }` if multiple datasets are configured
+""")
+    def get(self):
+        args = getelevation_parser.parse_args()
+        datasets = get_datasets(tenant_handler.tenant())
+        try:
+            pos = args['pos'].split(',')
+            pos = [float(pos[0]), float(pos[1])]
+        except:
+            return {"error": "Invalid position specified"}, 400
+        try:
+            epsg = int(re.match(r'epsg:(\d+)', args['crs'], re.IGNORECASE).group(1))
+        except:
+            return {"error": "Invalid projection specified"}, 400
 
+        inputSpatialRef = osr.SpatialReference()
+        if inputSpatialRef.ImportFromEPSG(epsg) != 0:
+            return {"error": "Failed to parse projection"}, 400
 
-    elevations = []
-    for (name, dataset) in datasets:
-        crsTransform = osr.CoordinateTransformation(inputSpatialRef, dataset["spatialRef"])
-        elevation = sample_elevation(dataset, pos, crsTransform)
-
-        elevations.append({
-            "dataset": name,
-            "elevation": elevation
-        })
-
-    # Backwards compatibility for single dataset
-    if len(elevations) == 1 and elevations[0]["dataset"] is None:
-        return {"elevation": elevations[0]["elevation"]}
-    return {"elevation_list": elevations}
-
-
-@app.route("/getheightprofile", methods=['POST'])
-# `/getheightprofile`
-# payload: a json document as follows:
-#        {
-#            coordinates: [[x1,y1],[x2,y2],...],
-#            distances: [<dist_x1_x2>, <dist_x2_x3>, ...],
-#            projection: <EPSG:XXXX, projection of coordinates>,
-#            samples: <number of height samples to return>
-#        }
-# output: a json document with either heights in meters: `{elevations: [h1, h2, ...]}`
-#   or a list of elevations for each dataset:
-#  `{elevations_list: [{dataset: dataset1, elevations: [h1, h2, ...]}, {dataset: dataset2, elevations: [h1, h2, ...]}, ...]}`
-def getheightprofile():
-    datasets = get_datasets(tenant_handler.tenant())
-    query = request.json
-
-    if not isinstance(query, dict) or not "projection" in query or not "coordinates" in query or not "distances" in query or not "samples" in query:
-        return {"error": "Bad query"}, 400
-
-    if not isinstance(query["coordinates"], list) or len(query["coordinates"]) < 2:
-        return {"error": "Insufficient number of coordinates specified"}, 400
-
-    if not isinstance(query["distances"], list) or len(query["distances"]) != len(query["coordinates"]) - 1:
-        return {"error": "Invalid distances specified"}, 400
-
-    try:
-        epsg = int(re.match(r'epsg:(\d+)', query["projection"], re.IGNORECASE).group(1))
-    except:
-        return {"error": "Invalid projection specified"}, 400
-
-    try:
-        numSamples = int(query["samples"])
-    except:
-        return {"error": "Invalid sample count specified"}, 400
-
-    inputSpatialRef = osr.SpatialReference()
-    if inputSpatialRef.ImportFromEPSG(epsg) != 0:
-        return {"error": "Failed to parse projection"}, 400
-
-    datasets_elevations = []
-
-    for (name, dataset) in datasets:
-        crsTransform = osr.CoordinateTransformation(inputSpatialRef, dataset["spatialRef"])
 
         elevations = []
-
-        x = 0
-        i = 0
-        p1 = query["coordinates"][i]
-        p2 = query["coordinates"][i + 1]
-        dr = (p2[0] - p1[0], p2[1] - p1[1])
-        cumDistances = list(accumulate(query["distances"]))
-        cumDistances.insert(0, 0)
-        totDistance = sum(query["distances"])
-        for s in range(0, numSamples):
-            while i + 2 < len(cumDistances) and x > cumDistances[i + 1]:
-                i += 1
-                p1 = query["coordinates"][i]
-                p2 = query["coordinates"][i + 1]
-                dr = (p2[0] - p1[0], p2[1] - p1[1])
-
-            try:
-                mu = (x - cumDistances[i]) / (cumDistances[i+1] - cumDistances[i])
-            except ZeroDivisionError:
-                mu = 0
-
-            pos = (p1[0] + mu * dr[0], p1[1] + mu * dr[1])
-
+        for (name, dataset) in datasets:
+            crsTransform = osr.CoordinateTransformation(inputSpatialRef, dataset["spatialRef"])
             elevation = sample_elevation(dataset, pos, crsTransform)
-            elevations.append(elevation)
 
-            x += totDistance / (numSamples - 1)
+            elevations.append({
+                "dataset": name,
+                "elevation": elevation
+            })
 
-        datasets_elevations.append({
-            "dataset": name,
-            "elevations": elevations
-        })
+        # Backwards compatibility for single dataset
+        if len(elevations) == 1 and elevations[0]["dataset"] is None:
+            return {"elevation": elevations[0]["elevation"]}
+        return {"elevation_list": elevations}
 
-    # Backwards compatibility for single dataset
-    if len(datasets_elevations) == 1 and datasets_elevations[0]["dataset"] is None:
-        return {"elevations": datasets_elevations[0]["elevations"]}
 
-    return {"elevations_list": datasets_elevations}
+getheightprofile_model = api.model('Height profile query', {
+    'coordinates': fields.List(
+        fields.List(fields.Float), required=True, description="List of coordinates as `[[x1, y1], [x2, y2], ...]`",
+        example='[[x1, y1], [x2, y2], ...]'
+    ),
+    'distances': fields.List(
+        fields.Float, required=True, description="List of distances between coordinates, as `[<dist_x1_x2>, <dist_x2_x3>, ...]`",
+        example='[<dist_x1_x2>, <dist_x2_x3>, ...]'
+    ),
+    'projection': fields.String(required=True, description="CRS of coordinates, as `EPSG:<srid>`", example='EPSG:<srid>'),
+    'samples': fields.Integer(required=True, description="Number of height samples to return", min=2, example='50')
+})
+
+@api.route("/getheightprofile")
+class ObjInfo(Resource):
+    @api.doc('getheightprofile')
+    @api.expect(getheightprofile_model)
+    @api.response(200, """Returns elevations, in meters, as follows:
+- `{ "elevations": [<float>, <float>, ...] }` when a single dataset is configured
+- `{ "elevation_list": [ { "dataset": <string>, "elevations": [<float>, <float>, ...] }, ... ] }` if multiple datasets are configured
+""")
+    def post(self):
+        datasets = get_datasets(tenant_handler.tenant())
+        data = api.payload
+
+        if len(data["coordinates"]) < 2:
+            return {"error": "Insufficient number of coordinates specified"}, 400
+
+        if len(data["distances"]) != len(data["coordinates"]) - 1:
+            return {"error": "Invalid number of distances specified"}, 400
+
+        try:
+            epsg = int(re.match(r'epsg:(\d+)', data["projection"], re.IGNORECASE).group(1))
+        except:
+            return {"error": "Invalid projection specified"}, 400
+
+        try:
+            numSamples = int(data["samples"])
+        except:
+            return {"error": "Invalid sample count specified"}, 400
+
+        inputSpatialRef = osr.SpatialReference()
+        if inputSpatialRef.ImportFromEPSG(epsg) != 0:
+            return {"error": "Failed to parse projection"}, 400
+
+        datasets_elevations = []
+
+        for (name, dataset) in datasets:
+            crsTransform = osr.CoordinateTransformation(inputSpatialRef, dataset["spatialRef"])
+
+            elevations = []
+
+            x = 0
+            i = 0
+            p1 = data["coordinates"][i]
+            p2 = data["coordinates"][i + 1]
+            dr = (p2[0] - p1[0], p2[1] - p1[1])
+            cumDistances = list(accumulate(data["distances"]))
+            cumDistances.insert(0, 0)
+            totDistance = sum(data["distances"])
+            for s in range(0, numSamples):
+                while i + 2 < len(cumDistances) and x > cumDistances[i + 1]:
+                    i += 1
+                    p1 = data["coordinates"][i]
+                    p2 = data["coordinates"][i + 1]
+                    dr = (p2[0] - p1[0], p2[1] - p1[1])
+
+                try:
+                    mu = (x - cumDistances[i]) / (cumDistances[i+1] - cumDistances[i])
+                except ZeroDivisionError:
+                    mu = 0
+
+                pos = (p1[0] + mu * dr[0], p1[1] + mu * dr[1])
+
+                elevation = sample_elevation(dataset, pos, crsTransform)
+                elevations.append(elevation)
+
+                x += totDistance / (numSamples - 1)
+
+            datasets_elevations.append({
+                "dataset": name,
+                "elevations": elevations
+            })
+
+        # Backwards compatibility for single dataset
+        if len(datasets_elevations) == 1 and datasets_elevations[0]["dataset"] is None:
+            return {"elevations": datasets_elevations[0]["elevations"]}
+
+        return {"elevations_list": datasets_elevations}
 
 
 """ readyness probe endpoint """
