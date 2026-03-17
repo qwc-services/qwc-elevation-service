@@ -22,9 +22,9 @@ colorama==0.4.6 ; sys_platform == 'win32' \
     --hash=sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44 \
     --hash=sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6
     # via click
-flask==3.1.2 \
-    --hash=sha256:bf656c15c80190ed628ad08cdfd3aaa35beb087855e2f494910aa3774cc4fd87 \
-    --hash=sha256:ca1d8112ec8a6158cc29ea4858963350011b5c846a414cdb7a954aa9e967d03c
+flask==3.1.3 \
+    --hash=sha256:0ef0e52b8a9cd932855379197dd8f94047b359ca0a78695144304cb45f87c9eb \
+    --hash=sha256:f4bcbefc124291925f1a26446da31a5178f9483862233b23c0c96a20701f670c
     # via
     #   flask-jwt-extended
     #   flask-restx
@@ -140,9 +140,9 @@ markupsafe==3.0.3 \
     #   flask
     #   jinja2
     #   werkzeug
-pyjwt==2.11.0 \
-    --hash=sha256:35f95c1f0fbe5d5ba6e43f00271c275f7a1a4db1dab27bf708073b75318ea623 \
-    --hash=sha256:94a6bde30eb5c8e04fee991062b534071fd1439ef58d2adc9ccb823e7bcd0469
+pyjwt==2.12.1 \
+    --hash=sha256:28ca37c070cad8ba8cd9790cd940535d40274d22f80ab87f3ac6a713e6e8454c \
+    --hash=sha256:c74a7a2adf861c04d002db713dd85f84beb242228e671280bf709d765b03672b
     # via flask-jwt-extended
 qwc-services-core==1.5.2 \
     --hash=sha256:1486702ddebc7847e6801dd0d923d55490a7fdbfdc2661b9e74f9ff80c48e756 \
@@ -277,10 +277,12 @@ rpds-py==0.30.0 \
 typing-extensions==4.15.0 ; python_full_version < '3.13' \
     --hash=sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466 \
     --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548
-    # via referencing
-werkzeug==3.1.5 \
-    --hash=sha256:5111e36e91086ece91f93268bb39b4a35c1e6f1feac762c9c822ded0a4e322dc \
-    --hash=sha256:6a548b0e88955dd07ccb25539d7d0cc97417ee9e179677d22c7041c8f078ce67
+    # via
+    #   pyjwt
+    #   referencing
+werkzeug==3.1.6 \
+    --hash=sha256:210c6bede5a420a913956b4791a7f4d6843a43b6fcee4dfa08a65e93007d0d25 \
+    --hash=sha256:7ddf3357bb9564e407607f988f683d72038551200c704012bb9a4c523d42f131
     # via
     #   flask
     #   flask-jwt-extended
