@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from flask import Flask, g, abort, request, make_response
-from flask_restx import Api, Resource, reqparse, fields
+from flask_restx import Resource, reqparse, fields
 from itertools import accumulate
 from osgeo import gdal
 from osgeo import osr
@@ -14,7 +14,7 @@ import math
 import os
 import re
 import struct
-from qwc_services_core.api import CaseInsensitiveArgument
+from qwc_services_core.api import Api, CaseInsensitiveArgument
 from qwc_services_core.tenant_handler import (
     TenantHandler, TenantPrefixMiddleware, TenantSessionInterface)
 from qwc_services_core.runtime_config import RuntimeConfig
@@ -150,6 +150,7 @@ class ObjInfo(Resource):
 - `{ "elevation_list": [ { "dataset": <string>, "elevation": <float> }, ... ] }` if multiple datasets are configured
 """)
     def get(self):
+        """ Query the elevation at a specified position """
         args = getelevation_parser.parse_args()
         datasets = get_datasets(tenant_handler.tenant())
         try:
@@ -205,6 +206,7 @@ class ObjInfo(Resource):
 - `{ "elevation_list": [ { "dataset": <string>, "elevations": [<float>, <float>, ...] }, ... ] }` if multiple datasets are configured
 """)
     def post(self):
+        """ Query elevations for a list of coordinates """
         datasets = get_datasets(tenant_handler.tenant())
         data = api.payload
 
